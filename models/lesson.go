@@ -15,14 +15,14 @@ type Lesson struct {
 
 func NewLesson(params *[]string) *Lesson {
 	p := *params
-	return &Lesson {
-		Room: p[0],
-		Number: p[1],
+	return &Lesson{
+		Room:    p[0],
+		Number:  p[1],
 		Teacher: p[2],
-		Type: p[3],
-		Name: p[4],
-		Group: p[5],
-		Note: p[6],
+		Type:    p[3],
+		Name:    p[4],
+		Group:   p[5],
+		Note:    p[6],
 	}
 }
 
