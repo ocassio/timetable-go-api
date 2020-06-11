@@ -13,9 +13,10 @@ import (
 func main() {
 	server := gin.Default()
 
-	server.GET("/criteria/:id", func (ctx *gin.Context) {
+	server.GET("/criteria/:id", func(ctx *gin.Context) {
 		criteriaType := ctx.Param("id")
-		criteria, err := data_provider.GetCriteria(criteriaType); if err != nil {
+		criteria, err := data_provider.GetCriteria(criteriaType)
+		if err != nil {
 			panic(err)
 		}
 		ctx.JSON(http.StatusOK, criteria)
@@ -31,40 +32,49 @@ func main() {
 		if !fromPresent {
 			dateRange = date_utils.GetSevenDays(nil)
 		} else {
-			fromDate, err := date_utils.ToDate(from); if err != nil {
+			fromDate, err := date_utils.ToDate(from)
+			if err != nil {
 				sendMalformedDateError(ctx, from)
 				return
 			}
 
 			if toPresent {
-				toDate, err := date_utils.ToDate(to); if err != nil {
+				toDate, err := date_utils.ToDate(to)
+				if err != nil {
 					sendMalformedDateError(ctx, to)
 					return
 				}
 
-				dateRange = models.DateRange {
+				dateRange = models.DateRange{
 					From: fromDate,
-					To: toDate,
+					To:   toDate,
 				}
 			} else {
 				dateRange = date_utils.GetSevenDays(&fromDate)
 			}
 		}
 
-		timetable, err := data_provider.GetTimetable(criteriaType, criterion, &dateRange); if err != nil {
+		timetable, err := data_provider.GetLessons(criteriaType, criterion, &dateRange)
+		if err != nil {
 			panic(err)
 		}
 
 		ctx.JSON(http.StatusOK, timetable)
 	})
 
-	err := server.Run(config.Config.Address); if err != nil {
+	server.POST("/cache/evict", func(ctx *gin.Context) {
+		data_provider.EvictCache()
+		ctx.Status(200)
+	})
+
+	err := server.Run(config.Config.Address)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func sendMalformedDateError(ctx *gin.Context, date string) {
-	ctx.AbortWithStatusJSON(400, gin.H {
+	ctx.AbortWithStatusJSON(400, gin.H{
 		"error": "Malformed date: " + date,
 	})
 }

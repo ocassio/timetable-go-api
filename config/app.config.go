@@ -6,9 +6,11 @@ import (
 )
 
 type AppConfig struct {
-	Address        string
-	TimetableUrl   string
-	RequestTimeout time.Duration
+	Address              string
+	TimetableUrl         string
+	RequestTimeout       time.Duration
+	CacheTimeout         time.Duration
+	CacheCleanupInterval time.Duration
 }
 
 var Config AppConfig
@@ -18,7 +20,9 @@ func init() {
 		Address:      ":8080",
 		TimetableUrl: "https://www.tolgas.ru/services/raspisanie/",
 
-		RequestTimeout: 20,
+		RequestTimeout:       20,
+		CacheTimeout:         24 * 60,
+		CacheCleanupInterval: 4 * 60,
 	}
 
 	addressEnv, present := os.LookupEnv("ADDRESS")
@@ -31,12 +35,31 @@ func init() {
 		Config.TimetableUrl = timetableUrlEnv
 	}
 
-	requestTimeoutEnv, present := os.LookupEnv("REQUEST_TIMEOUT")
+	requestTimeoutEnv, present := getDurationVariable("REQUEST_TIMEOUT")
 	if present {
-		timeout, err := time.ParseDuration(requestTimeoutEnv)
+		Config.RequestTimeout = *requestTimeoutEnv
+	}
+
+	cacheTimeoutEnv, present := getDurationVariable("CACHE_TIMEOUT")
+	if present {
+		Config.CacheTimeout = *cacheTimeoutEnv
+	}
+
+	cacheCleanupIntervalEnv, present := getDurationVariable("CACHE_CLEANUP_INTERVAL")
+	if present {
+		Config.CacheCleanupInterval = *cacheCleanupIntervalEnv
+	}
+}
+
+func getDurationVariable(name string) (*time.Duration, bool) {
+	variable, present := os.LookupEnv(name)
+	if present {
+		duration, err := time.ParseDuration(variable)
 		if err != nil {
 			panic(err)
 		}
-		Config.RequestTimeout = timeout
+		return &duration, true
 	}
+
+	return nil, false
 }

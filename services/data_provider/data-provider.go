@@ -5,6 +5,7 @@ import (
 	"github.com/ocassio/timetable-go-api/config"
 	"github.com/ocassio/timetable-go-api/models"
 	"github.com/ocassio/timetable-go-api/utils/date_utils"
+	"github.com/patrickmn/go-cache"
 	"golang.org/x/net/html"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -20,12 +21,19 @@ const colCount = 7
 const timeRegexPattern = "\\d{2}[\\.-]\\d{2}-\\d{2}[\\.-]\\d{2}"
 const timePointRegexPattern = "\\d{2}"
 
+const timetableCacheKey = "timetable"
+const criteraCacheKey = "criteria"
+const lessonsCacheKey = "lessons"
+
 var client http.Client
 var encoder *encoding.Encoder
 var decoder *encoding.Decoder
 
 var timeRegex *regexp.Regexp
 var timePointRegex *regexp.Regexp
+
+var dataCache *cache.Cache
+var timestamp string
 
 func init() {
 	client = http.Client{
@@ -47,9 +55,35 @@ func init() {
 		panic(err)
 	}
 	timePointRegex = regex
+
+	dataCache = cache.New(
+		config.Config.CacheTimeout*time.Minute,
+		config.Config.CacheCleanupInterval*time.Minute,
+	)
 }
 
-func GetCriteria(criteriaType string) ([]models.Criterion, error) {
+func EvictCache() {
+	dataCache.Flush()
+}
+
+func GetCriteria(criteriaType string) (*[]models.Criterion, error) {
+	cacheKey := criteraCacheKey + "|" + criteriaType
+	data, found := dataCache.Get(cacheKey)
+	if found {
+		return data.(*[]models.Criterion), nil
+	}
+
+	criteria, err := LoadCriteria(criteriaType)
+	if err != nil {
+		return nil, err
+	}
+
+	dataCache.SetDefault(cacheKey, criteria)
+
+	return criteria, nil
+}
+
+func LoadCriteria(criteriaType string) (*[]models.Criterion, error) {
 	request, err := http.NewRequest("GET", config.Config.TimetableUrl, nil)
 	if err != nil {
 		return nil, err
@@ -72,6 +106,8 @@ func GetCriteria(criteriaType string) ([]models.Criterion, error) {
 		return nil, err
 	}
 
+	evictCacheIfNeeded(document)
+
 	var result []models.Criterion
 	document.Find("#vr option").Each(func(i int, s *goquery.Selection) {
 		id, _ := s.Attr("value")
@@ -81,10 +117,29 @@ func GetCriteria(criteriaType string) ([]models.Criterion, error) {
 		})
 	})
 
-	return result, nil
+	return &result, nil
 }
 
-func GetTimetable(criteriaType string, criterion string, dateRange *models.DateRange) ([]models.Day, error) {
+func GetLessons(criteriaType string, criterion string, dateRange *models.DateRange) (*[]models.Day, error) {
+	cacheKey := lessonsCacheKey + "|" + criteriaType + "|" + criterion +
+		"|" + date_utils.ToDateString(dateRange.From) + "-" + date_utils.ToDateString(dateRange.To)
+
+	data, found := dataCache.Get(cacheKey)
+	if found {
+		return data.(*[]models.Day), nil
+	}
+
+	lessons, err := LoadLessons(criteriaType, criterion, dateRange)
+	if err != nil {
+		return nil, err
+	}
+
+	dataCache.SetDefault(cacheKey, lessons)
+
+	return lessons, nil
+}
+
+func LoadLessons(criteriaType string, criterion string, dateRange *models.DateRange) (*[]models.Day, error) {
 	encodedShowArg, err := encoder.String("ПОКАЗАТЬ")
 	if err != nil {
 		return nil, err
@@ -109,10 +164,12 @@ func GetTimetable(criteriaType string, criterion string, dateRange *models.DateR
 		return nil, err
 	}
 
+	evictCacheIfNeeded(document)
+
 	return getDays(document)
 }
 
-func getDays(document *goquery.Document) ([]models.Day, error) {
+func getDays(document *goquery.Document) (*[]models.Day, error) {
 	elements := document.Find("#send td.hours")
 	if elements.Length() == 0 {
 		return nil, &MissingTimetableError{}
@@ -122,10 +179,10 @@ func getDays(document *goquery.Document) ([]models.Day, error) {
 
 	// No lessons have been found
 	if elements.Length() == 1 {
-		return days, nil
+		return &days, nil
 	}
 
-	timeRanges, err := getTimeRanges(document)
+	timeRanges, err := getTimetable(document)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +235,7 @@ func getDays(document *goquery.Document) ([]models.Day, error) {
 		})
 	}
 
-	return days, nil
+	return &days, nil
 }
 
 func isDate(node *html.Node) bool {
@@ -191,7 +248,23 @@ func isDate(node *html.Node) bool {
 	return err == nil
 }
 
-func getTimeRanges(document *goquery.Document) (*[7][]models.TimeRange, error) {
+func getTimetable(document *goquery.Document) (*[7][]models.TimeRange, error) {
+	data, found := dataCache.Get(timetableCacheKey)
+	if found {
+		return data.(*[7][]models.TimeRange), nil
+	}
+
+	timetable, err := loadTimetable(document)
+	if err != nil {
+		return nil, err
+	}
+
+	dataCache.SetDefault(timetableCacheKey, timetable)
+
+	return timetable, nil
+}
+
+func loadTimetable(document *goquery.Document) (*[7][]models.TimeRange, error) {
 	result := [7][]models.TimeRange{}
 
 	rows := document.Find(".table:not(#send) tr")
@@ -266,6 +339,23 @@ func formatTime(source string) string {
 	}
 
 	return result
+}
+
+func evictCacheIfNeeded(document *goquery.Document) {
+	elements := document.Find(".last_mod")
+	if elements.Length() == 0 {
+		return
+	}
+
+	for node := elements.Get(0).FirstChild; node != nil; node = node.NextSibling {
+		if node.Type == html.TextNode {
+			if timestamp != node.Data {
+				dataCache.Flush()
+			}
+			timestamp = node.Data
+			return
+		}
+	}
 }
 
 type MissingTimetableError struct{}
