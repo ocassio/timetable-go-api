@@ -1,35 +1,44 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/cors"
+	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/middleware"
 	"github.com/ocassio/timetable-go-api/config"
 	"github.com/ocassio/timetable-go-api/models"
 	"github.com/ocassio/timetable-go-api/services/data_provider"
 	"github.com/ocassio/timetable-go-api/utils/date_utils"
 	"log"
-	"net/http"
 )
 
 func main() {
-	server := gin.Default()
+	server := fiber.New()
 
-	server.GET("/criteria/:id", func(ctx *gin.Context) {
-		criteriaType := ctx.Param("id")
+	server.Use(middleware.Recover())
+	server.Use(middleware.Logger())
+	server.Use(cors.New())
+
+	server.Get("/criteria/:id", func(ctx *fiber.Ctx) {
+		criteriaType := ctx.Query("id")
 		criteria, err := data_provider.GetCriteria(criteriaType)
 		if err != nil {
-			panic(err)
+			ctx.Next(err)
 		}
-		ctx.JSON(http.StatusOK, criteria)
+
+		err = ctx.JSON(criteria)
+		if err != nil {
+			ctx.Next(err)
+		}
 	})
 
-	server.GET("/timetable", func(ctx *gin.Context) {
+	server.Get("/timetable", func(ctx *fiber.Ctx) {
 		criteriaType := ctx.Query("criteriaType")
 		criterion := ctx.Query("criterion")
-		from, fromPresent := ctx.GetQuery("from")
-		to, toPresent := ctx.GetQuery("to")
+		from := ctx.Query("from")
+		to := ctx.Query("to")
 
 		var dateRange models.DateRange
-		if !fromPresent {
+		if len(from) == 0 {
 			dateRange = date_utils.GetSevenDays(nil)
 		} else {
 			fromDate, err := date_utils.ToDate(from)
@@ -38,7 +47,7 @@ func main() {
 				return
 			}
 
-			if toPresent {
+			if len(to) > 0 {
 				toDate, err := date_utils.ToDate(to)
 				if err != nil {
 					sendMalformedDateError(ctx, to)
@@ -56,25 +65,28 @@ func main() {
 
 		timetable, err := data_provider.GetLessons(criteriaType, criterion, &dateRange)
 		if err != nil {
-			panic(err)
+			ctx.Next(err)
 		}
 
-		ctx.JSON(http.StatusOK, timetable)
+		err = ctx.JSON(timetable)
+		if err != nil {
+			ctx.Next(err)
+		}
 	})
 
-	server.POST("/cache/evict", func(ctx *gin.Context) {
+	server.Post("/cache/evict", func(ctx *fiber.Ctx) {
 		data_provider.EvictCache()
-		ctx.Status(200)
+		ctx.SendStatus(200)
 	})
 
-	err := server.Run(config.Config.Address)
+	err := server.Listen(config.Config.Address)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func sendMalformedDateError(ctx *gin.Context, date string) {
-	ctx.AbortWithStatusJSON(400, gin.H{
+func sendMalformedDateError(ctx *fiber.Ctx, date string) {
+	_ = ctx.Status(400).JSON(fiber.Map{
 		"error": "Malformed date: " + date,
 	})
 }
