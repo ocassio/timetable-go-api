@@ -6,7 +6,7 @@ import (
 )
 
 func GetCriteria(ctx *fiber.Ctx) {
-	criteriaType := ctx.Query("id")
+	criteriaType := ctx.Params("id")
 	criteria, err := data_provider.GetCriteria(criteriaType)
 	if err != nil {
 		ctx.Next(err)
