@@ -1,20 +1,19 @@
 package data_provider
 
 import (
-	"github.com/PuerkitoBio/goquery"
-	"github.com/ocassio/timetable-go-api/config"
-	"github.com/ocassio/timetable-go-api/models"
-	"github.com/ocassio/timetable-go-api/utils/date_utils"
-	"github.com/patrickmn/go-cache"
-	"golang.org/x/net/html"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/ocassio/timetable-go-api/config"
+	"github.com/ocassio/timetable-go-api/models"
+	"github.com/ocassio/timetable-go-api/utils/date_utils"
+	"github.com/patrickmn/go-cache"
+	"golang.org/x/net/html"
 )
 
 const colCount = 7
@@ -26,8 +25,6 @@ const criteraCacheKey = "criteria"
 const lessonsCacheKey = "lessons"
 
 var client http.Client
-var encoder *encoding.Encoder
-var decoder *encoding.Decoder
 
 var timeRegex *regexp.Regexp
 var timePointRegex *regexp.Regexp
@@ -39,10 +36,6 @@ func init() {
 	client = http.Client{
 		Timeout: config.Config.RequestTimeout * time.Second,
 	}
-
-	cMap := charmap.Windows1251
-	encoder = cMap.NewEncoder()
-	decoder = cMap.NewDecoder()
 
 	regex, err := regexp.Compile(timeRegexPattern)
 	if err != nil {
@@ -99,9 +92,7 @@ func LoadCriteria(criteriaType string) (*[]models.Criterion, error) {
 	}
 	defer response.Body.Close()
 
-	reader := decoder.Reader(response.Body)
-
-	document, err := goquery.NewDocumentFromReader(reader)
+	document, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -140,26 +131,19 @@ func GetLessons(criteriaType string, criterion string, dateRange *models.DateRan
 }
 
 func LoadLessons(criteriaType string, criterion string, dateRange *models.DateRange) (*[]models.Day, error) {
-	encodedShowArg, err := encoder.String("ПОКАЗАТЬ")
-	if err != nil {
-		return nil, err
-	}
-
 	formValues := url.Values{}
 	formValues.Add("rel", criteriaType)
 	formValues.Add("vr", criterion)
 	formValues.Add("from", date_utils.ToDateString(dateRange.From))
 	formValues.Add("to", date_utils.ToDateString(dateRange.To))
-	formValues.Add("submit_button", encodedShowArg)
+	formValues.Add("submit_button", "ПОКАЗАТЬ")
 
 	response, err := client.PostForm(config.Config.TimetableUrl, formValues)
 	if err != nil {
 		return nil, err
 	}
 
-	reader := decoder.Reader(response.Body)
-
-	document, err := goquery.NewDocumentFromReader(reader)
+	document, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +299,7 @@ func getTimeRangesFromNodes(nodes *[]html.Node) *[]models.TimeRange {
 	for i := 0; i < len(nodesValue); i++ {
 		text := nodesValue[i].Data
 		match := timeRegex.FindAllString(text, 1)
-		if match != nil && len(match) > 0 {
+		if len(match) > 0 {
 			times := strings.SplitN(match[0], "-", 2)
 			result = append(result, models.TimeRange{
 				From: formatTime(times[0]),
@@ -329,7 +313,7 @@ func getTimeRangesFromNodes(nodes *[]html.Node) *[]models.TimeRange {
 
 func formatTime(source string) string {
 	timePoints := timePointRegex.FindAllString(source, 2)
-	if timePoints == nil || len(timePoints) == 0 {
+	if len(timePoints) == 0 {
 		return ""
 	}
 
