@@ -1,13 +1,13 @@
 package controllers
 
 import (
-	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
 	"github.com/ocassio/timetable-go-api/models"
 	"github.com/ocassio/timetable-go-api/services/data_provider"
 	"github.com/ocassio/timetable-go-api/utils/date_utils"
 )
 
-func GetTimetable(ctx *fiber.Ctx) {
+func GetTimetable(ctx *fiber.Ctx) error {
 	criteriaType := ctx.Query("criteriaType")
 	criterion := ctx.Query("criterion")
 	from := ctx.Query("from")
@@ -20,14 +20,12 @@ func GetTimetable(ctx *fiber.Ctx) {
 		fromDate, err := date_utils.ToDate(from)
 		if err != nil {
 			sendMalformedDateError(ctx, from)
-			return
 		}
 
 		if len(to) > 0 {
 			toDate, err := date_utils.ToDate(to)
 			if err != nil {
 				sendMalformedDateError(ctx, to)
-				return
 			}
 
 			dateRange = models.DateRange{
@@ -41,13 +39,15 @@ func GetTimetable(ctx *fiber.Ctx) {
 
 	timetable, err := data_provider.GetLessons(criteriaType, criterion, &dateRange)
 	if err != nil {
-		ctx.Next(err)
+		return err
 	}
 
 	err = ctx.JSON(timetable)
 	if err != nil {
-		ctx.Next(err)
+		return err
 	}
+
+	return nil
 }
 
 func sendMalformedDateError(ctx *fiber.Ctx, date string) {

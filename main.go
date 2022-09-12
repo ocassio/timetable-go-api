@@ -1,19 +1,21 @@
 package main
 
 import (
-	"github.com/gofiber/cors"
-	"github.com/gofiber/fiber"
-	"github.com/gofiber/fiber/middleware"
+	"log"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/ocassio/timetable-go-api/config"
 	"github.com/ocassio/timetable-go-api/controllers"
-	"log"
 )
 
 func main() {
 	server := fiber.New()
 
-	server.Use(middleware.Recover())
-	server.Use(middleware.Logger())
+	server.Use(recover.New())
+	server.Use(logger.New())
 	server.Use(cors.New())
 
 	server.Get("/criteria/:id", controllers.GetCriteria)

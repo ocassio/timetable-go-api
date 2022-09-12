@@ -1,5 +1,6 @@
 .idea/
 *.iml
+tmp/
 
 # Created by https://www.toptal.com/developers/gitignore/api/go,windows,linux,macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,windows,linux,macos

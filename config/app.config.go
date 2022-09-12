@@ -2,12 +2,11 @@ package config
 
 import (
 	"os"
-	"strconv"
 	"time"
 )
 
 type AppConfig struct {
-	Address              int
+	Address              string
 	TimetableUrl         string
 	RequestTimeout       time.Duration
 	CacheTimeout         time.Duration
@@ -18,7 +17,7 @@ var Config AppConfig
 
 func init() {
 	Config = AppConfig{
-		Address:      8080,
+		Address:      ":8080",
 		TimetableUrl: "https://www.tolgas.ru/services/raspisanie/",
 
 		RequestTimeout:       20,
@@ -28,11 +27,7 @@ func init() {
 
 	addressEnv, present := os.LookupEnv("ADDRESS")
 	if present {
-		address, err := strconv.Atoi(addressEnv)
-		if err != nil {
-			panic(err)
-		}
-		Config.Address = address
+		Config.Address = addressEnv
 	}
 
 	timetableUrlEnv, present := os.LookupEnv("TIMETABLE_URL")
